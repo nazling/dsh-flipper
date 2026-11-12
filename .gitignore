@@ -1,0 +1,32 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+*.hprof
+
+# Signing material (never commit)
+*.jks
+*.keystore
+debug.keystore
+
+# Local env / logs
+.env
+.env.*
+*.log
+
+# Scratch
+tmp/
+.cache/

@@ -1,0 +1,69 @@
+{
+  "name": "dsh-flipper",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "description": "让 AI 通过 DSH 遥控 Flipper Zero：屏幕、按键、App、SD 卡、Sub-GHz/NFC/RFID/红外/BadUSB，附 Android BLE 桥与电脑 USB 桥。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "flipper",
+    "flipper-zero",
+    "rpc",
+    "ble",
+    "android",
+    "bluetooth"
+  ],
+  "license": "MIT",
+  "files": [
+    "index.js",
+    "lib",
+    "tools",
+    "skill",
+    "cordis.patch.yml",
+    "README.md",
+    "icon.svg"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dshGo": {
+    "v": 1,
+    "title": {
+      "zh": "Flipper",
+      "en": "Flipper"
+    },
+    "icon": "robot",
+    "wants": [],
+    "contributes": {
+      "composer.strip": [
+        {
+          "id": "flipper-status",
+          "icon": "bolt",
+          "panel": "flipper"
+        }
+      ],
+      "panels": [
+        {
+          "id": "flipper",
+          "title": "Flipper 状态",
+          "icon": "robot",
+          "placement": [
+            "session.tab",
+            "features",
+            "chat.panel"
+          ]
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node test/e2e.mjs"
+  }
+}
