@@ -6,6 +6,30 @@ Sub-GHz / NFC / RFID / Infrared / BadUSB / GPIO.
 
 > Unofficial project. Not affiliated with Flipper Devices Inc. Use it only on your own devices.
 
+---
+
+### Status: connected, but the AI has not learned the device yet
+
+**Collecting: DeepSeek (DS) reasoning traces of driving the Flipper Zero.**
+
+I do not have enough of the model's reasoning traces or training data, so the AI is not yet fluent
+with the Flipper. I'm collecting how you and your agent actually work through it: what you asked,
+how it inferred the current screen, how it navigated the menus, where it pressed the wrong thing,
+how it recovered. Real traces are worth more than any amount of prompt text.
+
+What this project does and does not do:
+
+- **Done**: connects DSH to the Flipper (local serial / BLE bridge / TCP bridge, plus the desktop
+  sidebar panel) and hands the model the *basics* — the `flipper_*` tool set, an operating section
+  in the system prompt, and the bundled `dsh-flipper` skill.
+- **Not done**: the model has not mastered the device. The screen is 128×64 monochrome, menus are
+  icon rows and inverted blocks, and one button means different things on different pages. A tool
+  manual alone does not teach that; it takes repeated trial and error on real tasks.
+
+Share traces or just talk shop: **QQ 1132359085**
+
+---
+
 ## What's inside
 
 | Part | Description |
