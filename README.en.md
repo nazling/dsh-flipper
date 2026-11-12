@@ -10,11 +10,14 @@ Sub-GHz / NFC / RFID / Infrared / BadUSB / GPIO.
 
 | Part | Description |
 |---|---|
-| **DSH plugin** (repo root, Node.js) | Registers `flipper_*` tools, injects an operating guide into the system prompt, ships a `dsh-flipper` skill, and adds a status panel to the dsh-go mobile app |
+| **DSH plugin** (repo root, Node.js) | Registers `flipper_*` tools, injects an operating guide into the system prompt, ships a `dsh-flipper` skill, adds a **Flipper panel to the desktop Web GUI** (screen mirror, D-pad, apps, SD card, CLI, one-click connect), and a status panel to the dsh-go mobile app |
 | **Android BLE bridge** (`android/`) | Bridges the Flipper's Bluetooth serial profile to `127.0.0.1:9757`, because the DSH engine runs inside proot and cannot access Android BLE APIs |
 
-A PC USB bridge (`tools/flipper-bridge.py`) is also included for `tcp://<pc>:9757`, and the
-plugin can talk to a directly attached serial port with `serial:///dev/ttyACM0`.
+On a desktop the easiest path needs no scripts at all: the plugin drives the COM port through
+Win32 directly (`CreateFileW` / `SetCommState` / `ReadFile` / `WriteFile` via koffi, which ships
+with DSH Desktop), auto-detects the Flipper by USB VID/PID `0483:5740`, and the panel's Connect
+button is all a user has to press. The Python bridge (`tools/flipper-bridge.py`) is still there as
+a fallback for `tcp://<pc>:9757`.
 
 ## Features
 
@@ -25,6 +28,8 @@ plugin can talk to a directly attached serial port with `serial:///dev/ttyACM0`.
 - **System**: battery, time, alert, reboot, properties, desktop lock
 - **Discovery**: `flipper_capabilities` returns installed FAPs, resource-file counts/examples, tools, and workflows
 - **Agent loop**: system prompt + bundled skill + observe → act → observe
+- **Desktop panel**: live screen mirror, D-pad, one-click app launch, SD-card browser with text preview, CLI, port picker — sharing one RPC session with the agent
+- **No-Python connect on Windows**: native Win32 serial, Flipper auto-detection, optional connect-on-boot
 - **dsh-go panel**: live screen, battery, D-pad
 
 ## Architecture
@@ -32,8 +37,10 @@ plugin can talk to a directly attached serial port with `serial:///dev/ttyACM0`.
 ```mermaid
 flowchart LR
   AI[DSH / AI] --> P[dsh-flipper plugin]
-  P -->|TCP 127.0.0.1:9757| B[Android BLE bridge]
-  B -->|BLE GATT| F[Flipper Zero]
+  UI[Desktop panel] -->|/api/dsh-flipper/*| P
+  P -->|Win32 serial / serial://| F[Flipper Zero]
+  P -.->|TCP 127.0.0.1:9757| B[Android BLE bridge]
+  B -.->|BLE GATT| F
   P -.->|TCP| C[PC USB bridge]
   C -.-> F
 ```
@@ -47,20 +54,21 @@ cd dsh-flipper
 # Windows: .\install.ps1
 ```
 
-Or install straight from GitHub: `dsh plugin --profile web add github:<you>/dsh-flipper`.
+Or install straight from GitHub: `dsh plugin --profile desktop add github:<you>/dsh-flipper`.
 
-Restart the DSH engine, then connect:
+Restart DSH, then connect:
 
+- **Desktop serial (recommended)**: plug the Flipper in, close qFlipper, open the **Flipper** panel
+  in the sidebar and press Connect — or `flipper_connect()` with no arguments
+  (`serial://COM6` to be explicit). Nothing else to run on Windows.
 - **Android BLE bridge**: install `dist/flipper-ble-bridge-1.6.apk`, turn on Flipper Bluetooth,
   pair (PIN on the Flipper), wait for `TCP 监听 127.0.0.1:9757`, then
   `flipper_connect(endpoint="tcp://127.0.0.1:9757")`.
-- **PC USB bridge**: plug the Flipper into a PC, run `python3 tools/flipper-bridge.py`, then
-  `flipper_connect(endpoint="tcp://<pc-ip>:9757")`.
-- **Direct serial**: `flipper_connect(endpoint="serial:///dev/ttyACM0", link="serial")`.
+- **PC USB bridge** (fallback): plug the Flipper into a PC, run `python3 tools/flipper-bridge.py`,
+  then `flipper_connect(endpoint="tcp://<pc-ip>:9757")`.
 - **PC-side DSH**: install the same plugin on the PC; it gets the same system prompt and
-  `dsh-flipper` skill. Use `tcp://<pc-ip>:9757` with `link="usb"` (USB bridge) or
-  `serial:///dev/ttyACM0` with `link="serial"`. `flipper_cli` works on `usb`/`serial`, not on
-  `ble`. `link` defaults to `ble` on the phone and `usb`/`serial` on a PC.
+  `dsh-flipper` skill. `flipper_cli` works on `usb`/`serial`, not on `ble`. `link` defaults to
+  `ble` on the phone, `serial` for a local port, and `usb` for a TCP bridge.
 
 ## Tools
 
@@ -77,6 +85,7 @@ documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ```sh
 node test/e2e.mjs          # offline mock: protocol, screen, keys, storage, CLI
+node test/api-e2e.mjs      # offline mock: /api/dsh-flipper/* panel routes
 cd android && ./build.sh   # or open android/ in Android Studio
 ```
 

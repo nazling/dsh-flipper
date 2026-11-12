@@ -11,10 +11,10 @@ whenToUse: 用户要求查看或操作 Flipper Zero 时
 
 ## 前提
 
-- 手机/平板：安装并运行「Flipper BLE 桥」App，日志显示 `TCP 监听 127.0.0.1:9757`，插件 `flipper_connect(endpoint="tcp://127.0.0.1:9757")`。
-- 电脑（PC 端 DSH）：二选一
-  - 电脑插 Flipper，关掉 qFlipper，运行 `python3 tools/flipper-bridge.py`，插件连 `tcp://电脑IP:9757`，`link="usb"`；
-  - 或本机串口直连 `serial:///dev/ttyACM0`（Windows 用 `serial://COM5`），`link="serial"`。
+- 电脑（DSH 桌面端，首选）：Flipper 插 USB，关掉 qFlipper，**不用跑任何脚本** —— 插件自己调 Win32 串口（COMx），`flipper_connect` 不给参数即可（自动挑 Flipper 串口）；要指定就 `endpoint="serial://COM6"`，`link="serial"`。Linux/macOS 用 `serial:///dev/ttyACM0`。
+- 用户也可以自己点 DSH 侧边栏的「Flipper」面板：屏幕镜像、方向键、App 启动、SD 卡、CLI、连接/断开都在里面；面板和工具共用同一条连接。
+- 手机/平板：安装并运行「Flipper BLE 桥」App，日志显示 `TCP 监听 127.0.0.1:9757`，插件 `flipper_connect(endpoint="tcp://127.0.0.1:9757")`，`link="ble"`。
+- 只有拿不到本机串口时（例如串口被别的程序占着、或手机跨设备）才需要 `python3 tools/flipper-bridge.py` 起 TCP 桥，另一端连 `tcp://电脑IP:9757`，`link="usb"`。
 - 插件已用 `flipper_connect` 连上；`flipper_status` 能返回 endpoint/link/固件/电量。
 - 断连时：让用户重开桥 App 或重插 USB，再执行 `flipper_connect`。
 
@@ -26,9 +26,18 @@ whenToUse: 用户要求查看或操作 Flipper Zero 时
 |---|---|---|
 | `ble` | 手机/平板的 Android BLE 桥 | ❌ 没有 CLI 文本通道，不要用 `flipper_cli` |
 | `usb` | 电脑上的 `flipper-bridge.py` USB 桥 | ✅ 透明串口，可用 `flipper_cli` |
-| `serial` | 电脑本机 `serial://` 直连 | ✅ 可用 `flipper_cli` |
+| `serial` | 电脑本机串口直连（Windows 走 Win32 API，无需 python） | ✅ 可用 `flipper_cli` |
 
 PC 端的 DSH 装上同一个插件后，会得到同样的系统提示和 `dsh-flipper` 技能；工具完全一致，只是连接方式不同。
+
+## 电脑面板（用户手动操作时）
+
+DSH Web GUI 侧边栏 →「Flipper」：
+
+- 顶部选串口 / 波特率，点「连接」「断开」「找端口」。
+- 屏幕卡片自动镜像（约 1 秒一帧），下面是方向键 / OK / 长按返回。
+- 右侧「设备」显示固件、电量、存储、当前 App；「启动 App」一键以 RPC 模式启动；「SD 卡」可逐级浏览并预览文本文件；「CLI」直通命令。
+- 面板操作和你调工具是同一条 RPC 连接，不需要重复连接；你操作时用户会看到画面同步变化。
 
 ## 核心循环（自主操作）
 
@@ -119,6 +128,8 @@ PC 端的 DSH 装上同一个插件后，会得到同样的系统提示和 `dsh-
 ## 错误处理
 
 - `ECONNREFUSED 127.0.0.1:9757`：桥 App 的 TCP 没起来；让用户看 App 日志有没有 `TCP 监听`。
+- `串口 COMx 被占用`：qFlipper / 另一个 DSH / 桥进程还开着，让用户关掉再重试。
+- `没找到可用的 Flipper 串口`：USB 线/开关问题，或 Windows 驱动没装；让用户重插后点面板「找端口」。
 - `BLE 断开`：App 里点「重新连接 Flipper」，再 `flipper_connect`。
 - 截图是噪声：固件/解码器不匹配；让用户更新桥 App 或插件。
 - `APP_SYSTEM_LOCKED`：BACK 回桌面再启动。

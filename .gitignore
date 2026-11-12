@@ -30,3 +30,8 @@ debug.keystore
 # Scratch
 tmp/
 .cache/
+.tmp-e2e/
+*.tgz
+
+# Generated panel preview page
+tools/panel-preview/panel-preview.html

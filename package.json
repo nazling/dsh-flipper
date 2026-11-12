@@ -1,10 +1,27 @@
 {
   "name": "dsh-flipper",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.3.0",
   "type": "module",
   "main": "index.js",
-  "description": "让 AI 通过 DSH 遥控 Flipper Zero：屏幕、按键、App、SD 卡、Sub-GHz/NFC/RFID/红外/BadUSB，附 Android BLE 桥与电脑 USB 桥。",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "description": "让 AI 和桌面 DSH 一起遥控 Flipper Zero：屏幕镜像、方向键、App、SD 卡、Sub-GHz/NFC/RFID/红外/BadUSB。电脑端直接调 Win32 串口，不需要手动跑 python 桥。",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nazling/dsh-flipper.git"
+  },
+  "homepage": "https://github.com/nazling/dsh-flipper#readme",
+  "bugs": {
+    "url": "https://github.com/nazling/dsh-flipper/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -13,7 +30,9 @@
     "rpc",
     "ble",
     "android",
-    "bluetooth"
+    "bluetooth",
+    "serial",
+    "desktop"
   ],
   "license": "MIT",
   "files": [
@@ -33,6 +52,12 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
     }
   },
   "dshGo": {
@@ -66,6 +91,7 @@
     }
   },
   "scripts": {
-    "test": "node test/e2e.mjs"
+    "test": "node test/e2e.mjs && node test/api-e2e.mjs",
+    "prepublishOnly": "node test/e2e.mjs && node test/api-e2e.mjs"
   }
 }

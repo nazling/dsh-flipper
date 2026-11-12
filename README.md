@@ -3,6 +3,7 @@
   <h1>dsh-flipper</h1>
   <p><b>让 AI 通过 DSH 遥控 Flipper Zero</b></p>
   <p>看屏幕 · 按键 · 启动 App · 读写 SD 卡 · Sub-GHz / NFC / RFID / 红外 / BadUSB / GPIO</p>
+  <p>电脑端自带侧边栏面板 + Win32 串口直连：<b>插上 USB 就能用，不用跑 python</b></p>
   <p>
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license" />
     <img src="https://img.shields.io/badge/DSH-0.2.x-0f766e" alt="DSH" />
@@ -21,10 +22,10 @@
 
 | 部分 | 说明 |
 |---|---|
-| **DSH 插件**（根目录，Node.js） | 注册 `flipper_*` 工具：截屏、按键、启动 App、读写 SD 卡、GPIO、系统操作；往系统提示注入操作手册；随包注册 `dsh-flipper` 技能；dsh-go 手机端有「Flipper 状态」面板 |
+| **DSH 插件**（根目录，Node.js） | 注册 `flipper_*` 工具：截屏、按键、启动 App、读写 SD 卡、GPIO、系统操作；往系统提示注入操作手册；随包注册 `dsh-flipper` 技能；**桌面 Web GUI 里有「Flipper」面板**（屏幕镜像 / 方向键 / App / SD 卡 / CLI / 一键连接）；dsh-go 手机端有「Flipper 状态」面板 |
 | **Android BLE 桥**（`android/`） | 把 Flipper 的蓝牙串口桥接到本机 `127.0.0.1:9757`。DSH 引擎跑在 proot 里拿不到 Android BLE，所以需要这个原生桥 |
 
-不想用蓝牙也可以：电脑插 Flipper 跑 `tools/flipper-bridge.py`，插件连 `tcp://电脑IP:9757`；电脑本机还能直接 `serial:///dev/ttyACM0`。
+电脑插 USB 时最省事：插件直接用 **koffi 调 Win32 串口 API**（`CreateFileW` / `SetCommState` / `ReadFile` / `WriteFile`），不依赖 python、不编译原生模块，面板上点「连接」自动找 Flipper（VID `0483` / PID `5740`）的 COM 口。只有拿不到本机串口时，才需要 `tools/flipper-bridge.py` 那套 TCP 桥。
 
 ## 特性
 
@@ -35,6 +36,8 @@
 - **系统**：电量、时间、响铃、重启、property、桌面锁定/解锁
 - **发现**：`flipper_capabilities` 一次返回内置 App、第三方 FAP、各资源目录的数量与示例、工具清单和工作流
 - **AI 自主**：系统提示 + 随包技能 + 观察 → 行动 → 观察循环
+- **桌面面板**（DSH Web GUI 侧边栏）：屏幕实时镜像、方向键、一键启动 App、SD 卡逐级浏览 + 文本预览、CLI 直通、串口下拉 + 连接/断开；和 AI 共用同一条 RPC 连接
+- **无 python 连接**：Windows 走 Win32 串口直连；开机自动连一次；串口枚举能认出 Flipper
 - **dsh-go 面板**：输入框上方状态条 + 会话侧边「Flipper 状态」面板（实时屏幕、电量、方向键）
 
 ## 截图
@@ -50,15 +53,18 @@
 ```mermaid
 flowchart LR
   AI[DSH / AI] --> P[dsh-flipper 插件]
-  P -->|TCP 127.0.0.1:9757| B[Android BLE 桥]
-  B -->|BLE GATT| F[Flipper Zero]
+  UI[DSH 桌面面板] -->|/api/dsh-flipper/*| P
+  P -->|Win32 串口 / serial://| F[Flipper Zero]
+  P -.->|TCP 127.0.0.1:9757| B[Android BLE 桥]
+  B -.->|BLE GATT| F
   P -.->|TCP| C[电脑 USB 桥]
   C -.-> F
 ```
 
+- 电脑直连（首选）：`Flipper --USB--> DSH 插件（Win32 串口 API）`，面板与 AI 同一条连接
 - 蓝牙链路：`Flipper --BLE--> Android 桥 --TCP localhost--> DSH 插件`
-- 电脑链路：`Flipper --USB--> flipper-bridge.py --TCP--> DSH 插件`
-- 直连链路：`Flipper --USB--> DSH（serial://）`
+- 电脑兼容链路：`Flipper --USB--> flipper-bridge.py --TCP--> DSH 插件`
+- 桌面面板：`浏览器 --fetch /api/dsh-flipper/*--> 插件（只允许本机回环）`
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
@@ -91,7 +97,16 @@ dsh plugin --profile web add github:<you>/dsh-flipper
 
 ### 2. 连接 Flipper
 
-#### A. Android 蓝牙桥（推荐，无线）
+#### A. 电脑本机直连（推荐，插上就能用）
+
+Flipper 插 USB，关掉 qFlipper，**不需要跑任何脚本**：
+
+- 图形方式：DSH 侧边栏 →「Flipper」→ 串口下拉里选带 `Flipper` 标记的端口（一般是 `COM6`）→「连接」。屏幕镜像、方向键、App、SD 卡、CLI 都在这个面板里。
+- 对话方式：`flipper_connect()` 不给参数（自动挑 Flipper 串口）或 `flipper_connect(endpoint="serial://COM6")`。
+
+Windows 上插件自己调 `kernel32.dll` 的串口 API（koffi 是 DSH 桌面端自带依赖），所以没有 `pip install` 这一步；Linux/macOS 走系统串口（`serial:///dev/ttyACM0`，Linux 需要用户在 `dialout` 组）。
+
+#### B. Android 蓝牙桥（手机用，无线）
 
 1. 安装 [`dist/flipper-ble-bridge-1.6.apk`](dist/flipper-ble-bridge-1.6.apk)（debug 签名，侧载）。  
    在 GitHub 上打开这个文件点 **Download**，手机上点开安装并允许「安装未知应用」；也可以从 Releases 下载
@@ -106,7 +121,7 @@ dsh plugin --profile web add github:<you>/dsh-flipper
 flipper_connect(endpoint="tcp://127.0.0.1:9757")
 ```
 
-#### B. 电脑 USB 桥
+#### C. 电脑 TCP 桥（串口被占用 / 手机连电脑时）
 
 电脑插 Flipper，关掉 qFlipper：
 
@@ -117,13 +132,20 @@ python3 tools/flipper-bridge.py
 
 记下打印的 `tcp://192.168.x.x:9757`，在 DSH 里 `flipper_connect` 这个地址。Windows 可双击 `tools/start-bridge-windows.bat`。
 
-#### C. 电脑本机串口直连
+### 3. 桌面面板
 
-```text
-flipper_connect(endpoint="serial:///dev/ttyACM0", link="serial")
-```
+DSH Web GUI 侧边栏的「Flipper」页：
 
-Linux 需要把用户加入 `dialout` 组；Windows 可用 `serial://COM5`，但更推荐上面的 USB 桥。
+| 区域 | 内容 |
+|---|---|
+| 顶部 | 串口下拉（自动识别 Flipper）、波特率、连接/断开、刷新、找端口 |
+| 屏幕 | 128×64 实时镜像（约 1 秒一帧，可关自动刷新）、方向键 / OK / 长按返回、截图、回桌面、响铃 |
+| 设备 | 端点、固件、硬件、电量（含电压/充电）、存储、当前 App |
+| SD 卡 | `/ext` 逐级浏览，常用目录快捷键，文本文件直接预览 |
+| 启动 App | 一键以 RPC 模式启动 Sub-GHz / NFC / RFID / 红外 / iButton / Bad USB / GPIO / 音乐 |
+| CLI | 命令直通（串口链路下可用），ANSI 颜色会被清掉 |
+
+面板走 `/api/dsh-flipper/*`（只允许本机回环），和 AI 用同一个 Manager 实例，不会重复占串口。
 
 ### PC 端 DSH 也能用
 
@@ -131,13 +153,12 @@ PC 上安装同一个插件即可，模型会拿到**同样的系统提示和 `d
 
 | 场景 | 连接方式 | link | `flipper_cli` |
 |---|---|---|---|
+| 电脑串口直连 | 面板点连接 / `flipper_connect(endpoint="serial://COM6")` | `serial` | ✅ |
 | 手机/平板 | Android BLE 桥，`tcp://127.0.0.1:9757` | `ble` | ❌ 无 CLI 通道 |
-| 电脑 USB 桥 | `python3 tools/flipper-bridge.py` → `tcp://电脑IP:9757` | `usb` | ✅ |
-| 电脑串口直连 | `serial:///dev/ttyACM0` / `serial://COM5` | `serial` | ✅ |
+| 电脑 TCP 桥 | `python3 tools/flipper-bridge.py` → `tcp://电脑IP:9757` | `usb` | ✅ |
 
-- `flipper_connect` 的 `link` 不填时按环境自动推断：手机（dsh-go 环境）= `ble`，电脑 = `usb`/`serial`。
-- 电脑 USB 桥是透明串口中继，所以 CLI 也能用；BLE 桥没有 CLI 文本通道。
-- PC 端安装：`dsh plugin --profile web add <repo>`（桌面端把 `web` 换成 `desktop`），然后重启引擎；`flipper_connect(endpoint="tcp://127.0.0.1:9757", link="usb")`。
+- `flipper_connect` 的 `link` 不填时按环境自动推断：手机（dsh-go 环境）= `ble`，电脑串口 = `serial`，电脑 TCP 桥 = `usb`。
+- PC 端安装：`dsh plugin --profile desktop add <repo>`，然后重启 DSH（面板与接口在启动时挂载）。
 
 ## 工具
 
@@ -180,10 +201,10 @@ PC 上安装同一个插件即可，模型会拿到**同样的系统提示和 `d
 
 ```json
 {
-  "transport": "tcp",
-  "tcpHost": "127.0.0.1",
+  "transport": "auto",
+  "tcpHost": "",
   "tcpPort": 9757,
-  "serialPath": "",
+  "serialPath": "COM6",
   "baud": 230400,
   "timeoutMs": 8000,
   "link": "auto"
@@ -191,6 +212,8 @@ PC 上安装同一个插件即可，模型会拿到**同样的系统提示和 `d
 ```
 
 `link` 可以是 `auto` / `ble` / `usb` / `serial`；它决定 `flipper_status` 报告 `cliAvailable` 的真假。也支持环境变量 `FLIPPER_TCP=host:port` / `FLIPPER_SERIAL=/dev/ttyACM0`。截图默认保存到 `~/.dsh/flipper/screens/`。
+
+插件设置里还有 `autoConnect`（默认 `true`）：DSH 启动约 1 秒后自动连一次本机 Flipper，失败就等面板里点连接。`DSH_FLIPPER_KOFFI` 可以手动指定 koffi 路径（一般不用动）。
 
 ## 构建
 
@@ -200,7 +223,17 @@ PC 上安装同一个插件即可，模型会拿到**同样的系统提示和 `d
 
 ```sh
 node test/e2e.mjs        # 协议 + 截图 + 按键 + 存储 + CLI（离线模拟器）
+node test/api-e2e.mjs    # 面板接口族 /api/dsh-flipper/*（离线模拟器）
+node test/panel-mount.mjs # 走真实 index.js 挂载：工具 / 系统提示 / 技能 / 面板路由（需要本机 DSH）
 node test/tool-e2e.mjs   # 走真实 defineTool 校验（需要本机 DSH）
+```
+
+`lib/client.js` 是浏览器半边，零构建（`window.__ModuleLoader__.load` 包装 + `React.createElement`）。改 UI 时可以先看离线预览：
+
+```sh
+node tools/panel-preview/build.mjs        # 生成 tools/panel-preview/panel-preview.html
+python -m http.server 8891                # 仓库根目录起静态服务器
+# 打开 http://127.0.0.1:8891/tools/panel-preview/panel-preview.html
 ```
 
 ### Android 桥

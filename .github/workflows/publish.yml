@@ -1,0 +1,143 @@
+name: publish
+
+# 发布 npm 包 dsh-flipper。
+# 触发方式：
+#   1) 在 GitHub 上发布 Release（推荐：先改版本号，再建 tag v0.2.0，再发 Release）
+#   2) 推送形如 v0.2.0 的 tag
+#   3) 手动 workflow_dispatch（默认 dry_run=true，只验证打包不发布）
+#
+# 需要的前置：
+#   - 仓库 Secrets 里有 NPM_TOKEN（npm granular access token，权限 Read and write，勾选 Bypass 2FA 或自动发布）
+#   - package.json 不能有 "private": true
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只做打包与检查，不真正发布'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify (tests / version / pack)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Offline end-to-end tests
+        env:
+          DSH_HOME: /tmp/dsh-flipper-test
+        run: node test/e2e.mjs
+
+      - name: Resolve version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse private flag
+        run: |
+          if [ "$(node -p "require('./package.json').private")" = "true" ]; then
+            echo "::error::package.json 里 private:true，npm 会拒绝发布"
+            exit 1
+          fi
+
+      - name: Tag must match package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKG="${{ steps.version.outputs.version }}"
+          echo "tag=$TAG pkg=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag v$TAG 与 package.json 的 $PKG 不一致"
+            exit 1
+          fi
+
+      - name: Refuse to republish an existing version
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          if npm view "dsh-flipper@$V" version >/dev/null 2>&1; then
+            echo "::error::npm 上已存在 dsh-flipper@$V，先升版本号"
+            exit 1
+          fi
+          echo "npm 上还没有 dsh-flipper@$V"
+
+      - name: Pack and inspect contents
+        id: pack
+        run: |
+          npm pack --dry-run
+          TARBALL="$(npm pack --silent | tail -n 1)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "--- 内容清单 ---"
+          tar -tzf "$TARBALL" | sort
+
+      - name: Assert required files ship in the tarball
+        run: |
+          TARBALL="${{ steps.pack.outputs.tarball }}"
+          for f in package/index.js package/cordis.patch.yml package/skill/SKILL.md package/lib/manager.js; do
+            if ! tar -tzf "$TARBALL" | grep -qx "$f"; then
+              echo "::error::发布包里缺少 $f"
+              exit 1
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball-${{ steps.version.outputs.version }}
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/dsh-flipper
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "dry-run：只验证打包，不发布"
+            npm publish --dry-run --access public
+          else
+            npm publish --access public --provenance
+          fi
+
+      - name: Summary
+        run: |
+          V="${{ needs.verify.outputs.version }}"
+          {
+            echo "### dsh-flipper@$V"
+            echo ""
+            echo "- npm: https://www.npmjs.com/package/dsh-flipper/v/$V"
+            echo "- 桌面端安装：\`dsh plugin --profile desktop add dsh-flipper\`"
+            echo "- web 端安装：\`dsh plugin --profile web add dsh-flipper\`"
+          } >> "$GITHUB_STEP_SUMMARY"

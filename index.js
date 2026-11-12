@@ -1,22 +1,80 @@
-// dsh-flipper — 让 AI 通过 RPC 操作 Flipper Zero，并在 dsh-go 手机端提供状态面板。
+// dsh-flipper — 让 AI 通过 RPC 操作 Flipper Zero，并在 DSH 桌面端/手机端提供面板。
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { resolve as resolvePath } from 'node:path'
+import fs from 'node:fs'
+import path from 'node:path'
 import { FlipperManager, APP_NAMES } from './lib/manager.js'
 import { loadSkillDefinition } from './lib/skill.js'
 import { parseEndpoint } from './lib/transport.js'
 import { GPIO_PINS } from './lib/messages.js'
+import { createFlipperRoutes } from './lib/api.js'
 
-// 本地插件可能装在 profile 之外（dsh-go 的 plugins 目录），此时 @deepseek-ai/* 不在
-// 模块解析路径上；先按正常解析，失败再从 DSH 安装目录借一条解析路径。
+/**
+ * 找 @deepseek-ai/* 的可用解析根：插件常常装在 profile 之外（dsh-go 的 plugins 目录、
+ * 本机 link 的仓库），此时 @deepseek-ai/* 不在默认解析路径上。
+ * 除了正常 import，还会借 DSH 安装目录里的 node_modules（桌面端 <安装目录>/resources/app/node_modules）。
+ */
+function dshModuleRoots() {
+  const roots = []
+  const push = (dir) => {
+    if (dir && !roots.includes(dir)) roots.push(dir)
+  }
+  /** 安装目录常见形态：<任意>/<产品名>/resources/app —— 往下扫两层找它。 */
+  const scan = (root, depth = 2, budget = 400) => {
+    const stack = [{ dir: root, level: 0 }]
+    let visited = 0
+    while (stack.length > 0 && visited < budget) {
+      const { dir, level } = stack.pop()
+      visited += 1
+      push(path.join(dir, 'resources', 'app'))
+      push(dir)
+      if (level >= depth) continue
+      let entries = []
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true })
+      } catch {
+        continue
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue
+        stack.push({ dir: path.join(dir, entry.name), level: level + 1 })
+      }
+    }
+  }
+  for (const arg of process.argv.slice(0, 2)) {
+    if (!arg) continue
+    try {
+      push(path.dirname(path.resolve(arg)))
+    } catch {}
+  }
+  const execDir = process.execPath ? path.dirname(process.execPath) : ''
+  if (execDir) {
+    push(execDir)
+    push(path.join(execDir, 'resources', 'app'))
+    push(path.join(execDir, '..', 'resources', 'app'))
+  }
+  let dir = ''
+  try {
+    dir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+  } catch {}
+  for (let i = 0; i < 4 && dir; i += 1) {
+    scan(dir, i < 2 ? 2 : 0)
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  push('/opt/dsh')
+  push('/opt/dsh/node_modules')
+  return roots
+}
+
 async function loadDshModule(name) {
   try {
     return await import(name)
   } catch (first) {
-    const candidates = [process.argv[1], '/opt/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js'].filter(Boolean)
-    for (const base of candidates) {
+    for (const root of dshModuleRoots()) {
       try {
-        const requireFrom = createRequire(resolvePath(base))
+        const requireFrom = createRequire(path.join(root, 'noop.js'))
         const file = requireFrom.resolve(name)
         return await import(pathToFileURL(file).href)
       } catch {}
@@ -43,15 +101,20 @@ export const Config = Schema.object({
   tcpPort: Schema.number().default(9757).description('TCP 桥端口').volatile(),
   serialPath: Schema.string()
     .default('')
-    .description('串口路径，例如 /dev/ttyACM0；电脑直连时用')
+    .description('串口路径，例如 COM6 / /dev/ttyACM0；留空则自动挑 Flipper')
     .volatile(),
   baud: Schema.number().default(230400).description('串口波特率').volatile(),
   timeoutMs: Schema.number().default(8000).description('单条 RPC 超时（毫秒）').volatile(),
+  autoConnect: Schema.boolean()
+    .default(true)
+    .description('DSH 启动后自动连一次本机 Flipper（失败就等面板里点连接）')
+    .volatile(),
 }).description('Flipper Zero 连接配置。改了会立即生效；连接参数优先用 flipper_connect 保存的值。')
 
 const SYSTEM_PROMPT = [
-  '你可以通过 dsh-flipper 工具遥控用户的 Flipper Zero。连接可能是：手机/平板的 Android BLE 桥（tcp://127.0.0.1:9757，link=ble，没有 CLI）、电脑 USB 桥 flipper-bridge.py（tcp://电脑IP:9757，link=usb，CLI 可用）、或电脑本机串口（serial:///dev/ttyACM0 / COMx，link=serial，CLI 可用）。',
+  '你可以通过 dsh-flipper 工具遥控用户的 Flipper Zero。连接可能是：电脑本机串口（serial://COM6 或 /dev/ttyACM0，link=serial，CLI 可用；Windows 端由插件直接调 Win32 串口，不需要 python 桥）、电脑 USB 桥（tcp://电脑IP:9757，link=usb，CLI 可用）、或手机/平板的 Android BLE 桥（tcp://127.0.0.1:9757，link=ble，没有 CLI）。',
   'Flipper 是一台多功能无线/硬件工具：Sub-GHz、125 kHz RFID、NFC、红外、iButton、Bad USB、U2F、GPIO、音乐播放器，以及 /ext 下的第三方 App 和信号文件。',
+  '电脑用户也可以不通过你操作：DSH 侧边栏有「Flipper」面板，屏幕镜像、方向键、App 启动、SD 卡浏览、CLI 都在里面，连接按钮会自动找到 Flipper 串口。',
   '工作方式：先 flipper_status 确认 endpoint/link；用 flipper_capabilities 了解设备里的 App 和文件；操作前 flipper_screen 看界面；用 flipper_input 按键或 flipper_app 启动 App/加载文件；操作后再 flipper_screen 确认（或 flipper_input observe=true）。',
   '屏幕是 128x64 单色，ASCII 输出就是实际界面；需要细节时读 PNG。',
   'link=ble 时不要用 flipper_cli（没有 CLI 通道）；usb/serial 才可用。',
@@ -271,7 +334,7 @@ export function apply(ctx, rawConfig) {
     defineTool({
       name: 'flipper_connect',
       description:
-        '配置并连接 Flipper Zero。手机用法：先在电脑上跑 tools/flipper-bridge.py（Flipper 插电脑），再给 endpoint="tcp://电脑局域网IP:9757"。电脑本机直连可给 endpoint="serial:///dev/ttyACM0"。不给参数时使用已保存的配置并尝试连接。',
+        '配置并连接 Flipper Zero。电脑本机最省事：endpoint="serial://COM6" 或干脆不给参数（自动找 Flipper 串口，Windows 由插件直接调 Win32 串口，不需要 python 桥）。手机走电脑上的 BLE/TCP 桥时给 endpoint="tcp://电脑局域网IP:9757"。',
       parameters: {
         endpoint: { type: 'string', description: 'tcp://host:port 或 serial:///dev/ttyACM0' },
         transport: { type: 'string', enum: ['auto', 'tcp', 'serial'], description: '连接方式' },
@@ -597,6 +660,31 @@ export function apply(ctx, rawConfig) {
       },
     }),
   )
+
+  // ---- 桌面 Web GUI：/api/dsh-flipper/* 接口族 + 侧边栏面板（lib/client.js）----
+  ctx.inject(['webServer'], (wctx) => {
+    const server = wctx.webServer
+    if (!server || typeof server.register !== 'function') return
+    try {
+      const routes = createFlipperRoutes({ manager, getConfig: () => manager.config })
+      for (const route of routes) disposers.push(server.register(route))
+      manager.log('panel: /api/dsh-flipper 路由已挂载')
+    } catch (error) {
+      manager.log('panel: 路由挂载失败 ' + String(error.message).slice(0, 120))
+    }
+  })
+
+  // ---- 开机自动连一次：插着 Flipper 的话面板一打开就是已连接 ----
+  if (config.autoConnect !== false) {
+    const timer = setTimeout(() => {
+      manager
+        .status()
+        .then((status) => manager.log(`auto-connect: ${status.endpoint}`))
+        .catch((error) => manager.log('auto-connect 跳过：' + String(error.message).slice(0, 120)))
+    }, 1200)
+    if (typeof timer.unref === 'function') timer.unref()
+    disposers.push(() => clearTimeout(timer))
+  }
 
   // ---- 系统提示：让模型知道它能遥控 Flipper、该怎么观察-行动-观察 ----
   ctx.inject(['systemPrompt'], (sctx) => {
