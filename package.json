@@ -23,7 +23,9 @@
     "skill",
     "cordis.patch.yml",
     "README.md",
-    "icon.svg"
+    "icon.svg",
+    "install.sh",
+    "install.ps1"
   ],
   "engines": {
     "dsh": ">=0.2.1-rc.2 <0.3.0-0"

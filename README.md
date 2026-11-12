@@ -69,10 +69,23 @@ flowchart LR
 ```sh
 git clone <repo-url> dsh-flipper
 cd dsh-flipper
+./install.sh          # Linux / macOS / 手机 proot
+# Windows: .\install.ps1
+```
+
+`install.sh` 会把插件复制到 `$DSH_HOME/dsh-go/plugins/dsh-flipper`，再执行 `dsh plugin add`；dsh-go 用户建议就用这个方式（引擎重置会保留）。
+
+也可以手动：
+
+```sh
 dsh plugin --profile web add "$PWD"
 ```
 
-dsh-go 用户建议把整个目录放到 `$DSH_HOME/dsh-go/plugins/dsh-flipper`（引擎重置会保留），再执行 `dsh plugin add`。
+不落盘、直接从 GitHub 安装（把 `<you>` 换成你的账号）：
+
+```sh
+dsh plugin --profile web add github:<you>/dsh-flipper
+```
 
 装完在 App **设置 → 引擎 → 重启引擎**。插件零运行时依赖，要求 Node 20+、DSH `>= 0.2.1-rc.2 < 0.3.0`。
 
@@ -80,7 +93,8 @@ dsh-go 用户建议把整个目录放到 `$DSH_HOME/dsh-go/plugins/dsh-flipper`�
 
 #### A. Android 蓝牙桥（推荐，无线）
 
-1. 安装 [`dist/flipper-ble-bridge-1.6.apk`](dist/flipper-ble-bridge-1.6.apk)（debug 签名，侧载）
+1. 安装 [`dist/flipper-ble-bridge-1.6.apk`](dist/flipper-ble-bridge-1.6.apk)（debug 签名，侧载）。  
+   在 GitHub 上打开这个文件点 **Download**，手机上点开安装并允许「安装未知应用」；也可以从 Releases 下载
 2. Flipper：`设置 → 蓝牙 → ON`；关掉官方 Flipper App（会占用 BLE）
 3. 打开桥 App，允许定位权限，点「扫描并连接 Flipper」
 4. 首次配对：Flipper 屏幕显示 PIN，在系统弹窗输入
@@ -201,6 +215,8 @@ cd android
 
 `targetSdk 25` 是为了避开新系统的通知渠道和 Android 12+ 蓝牙权限限制；仅适合侧载。详见 [android/README.md](android/README.md)。
 
+> `dist` 里的 APK 用本机 debug key 签名。你自己用 `android/` 重建时签名不同，覆盖安装失败就先卸载旧版再装。
+
 ## 协议
 
 - BLE GATT 服务/特征 UUID、RPC 自动会话、varint 分帧、128x64 纵向页帧格式、USB 与 BLE 的差异：见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
@@ -240,7 +256,9 @@ cd android
 ├── test/                 # 离线模拟器与端到端测试
 ├── android/              # Android BLE 桥源码
 ├── docs/                 # 协议、架构、截图
-└── dist/                 # 预编译 APK
+├── dist/                 # 预编译 APK
+├── install.sh / .ps1     # 一键安装插件
+└── .github/workflows/    # CI
 ```
 
 ## License

@@ -43,8 +43,11 @@ flowchart LR
 ```sh
 git clone <repo-url> dsh-flipper
 cd dsh-flipper
-dsh plugin --profile web add "$PWD"
+./install.sh          # Linux / macOS / phone proot
+# Windows: .\install.ps1
 ```
+
+Or install straight from GitHub: `dsh plugin --profile web add github:<you>/dsh-flipper`.
 
 Restart the DSH engine, then connect:
 

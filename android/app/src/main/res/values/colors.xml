@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#F3F7F8</color>
+    <color name="ink">#0F172A</color>
+    <color name="muted">#64748B</color>
+    <color name="primary">#0F766E</color>
+    <color name="primaryDark">#115E59</color>
+    <color name="danger">#B91C1C</color>
+    <color name="logText">#D1FAE5</color>
+</resources>
