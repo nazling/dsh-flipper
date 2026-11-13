@@ -56,7 +56,7 @@
 - **AI 自主**：系统提示 + 随包技能 + 观察 → 行动 → 观察循环
 - **桌面面板**（DSH Web GUI 侧边栏）：屏幕实时镜像、方向键、一键启动 App、SD 卡逐级浏览 + 文本预览、CLI 直通、串口下拉 + 连接/断开；和 AI 共用同一条 RPC 连接
 - **无 python 连接**：Windows 走 Win32 串口直连；开机自动连一次；串口枚举能认出 Flipper
-- **dsh-go 面板**：输入框上方状态条 + 会话侧边「Flipper 状态」面板（实时屏幕、电量、方向键）
+- **dsh-go 适配**：输入框上方状态条 + 会话侧边「Flipper 状态」面板（实时屏幕、电量/固件、方向键）+ 截图结果画成原生图片卡；手机自动按 `ble` 走 BLE 桥
 
 ## 截图
 
@@ -65,6 +65,29 @@
   <img src="docs/screenshots/flipper-menu-4x.png" width="420" alt="Flipper 主菜单" />
 </p>
 <p align="center"><i>插件抓到的真实 Flipper 屏幕（128x64，放大 4 倍）</i></p>
+
+## dsh-go 插件优化适配
+
+手机上的 **dsh-go** 是 Flutter 原生界面，不是 Web 面板，所以插件单独做了一层适配：不走 `/api/dsh-flipper/*` 和 React 组件，而是直接用 `ctx.dshGo` 的原生组件，数据由同一份 `Manager` 供给，和 AI 共用一条 RPC 连接。
+
+| 位置 | 做了什么 |
+|---|---|
+| 会话侧边「Flipper 状态」面板 | 128×64 屏幕镜像（5 秒一帧，PNG 直接内联进面板，不落盘）、电量 / 固件两个 metric、存储可用量、方向键 6 键（一按就回图）、刷新 / 连接 |
+| 输入框上方状态条 | `Flipper 100%` / `Flipper 未连接`，15 秒刷一次；连不上就安静等，不弹窗打断对话 |
+| 工具结果卡片 | `flipper_screen` 用 `presentationMeta['dsh-go/view']` 把截图直接画成原生图片卡，手机上不再是一条 PNG 路径 |
+| 连接方式推断 | 手机环境自动判成 `link=ble`：只走 `tcp://127.0.0.1:9757`，不会去尝试没有的串口，`flipper_cli` 直接报「无 CLI 通道」 |
+
+<p align="center">
+  <img src="docs/screenshots/dsh-go-flipper-panel.jpg" width="720" alt="dsh-go 里的 Flipper 状态面板" />
+</p>
+<p align="center"><i>dsh-go「Flipper 状态」：屏幕实时镜像 + 电量 / 固件 + 存储，下面是方向键，已连接 BLE 桥 tcp://127.0.0.1:9757</i></p>
+
+<p align="center">
+  <img src="docs/screenshots/dsh-go-ble-bridge.jpg" width="720" alt="Android 端 Flipper BLE 桥" />
+</p>
+<p align="center"><i>Android 端 Flipper BLE 桥：扫描配对 → GATT 连接 → 本地 TCP 9757 监听，日志里能看到特征值、MTU 247 和每包字节数</i></p>
+
+> 手机上没有 CLI 文本通道：`flipper_cli` 在 `ble` 下不可用，其余工具（屏幕、按键、App、文件、系统、GPIO）都能用。
 
 ## 架构
 

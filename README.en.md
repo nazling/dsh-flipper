@@ -54,7 +54,30 @@ a fallback for `tcp://<pc>:9757`.
 - **Agent loop**: system prompt + bundled skill + observe → act → observe
 - **Desktop panel**: live screen mirror, D-pad, one-click app launch, SD-card browser with text preview, CLI, port picker — sharing one RPC session with the agent
 - **No-Python connect on Windows**: native Win32 serial, Flipper auto-detection, optional connect-on-boot
-- **dsh-go panel**: live screen, battery, D-pad
+- **dsh-go adaptation**: status strip above the composer, a "Flipper 状态" side panel (live screen, battery/firmware, D-pad), screen captures rendered as native image cards, and `link` defaulting to `ble` on the phone
+
+## dsh-go plugin adaptation
+
+The dsh-go mobile app is a Flutter native UI, not the web panel, so the plugin registers native
+components through `ctx.dshGo` instead of React routes and `/api/dsh-flipper/*`. Both front ends
+read from the same `Manager`, so the app and the agent share one RPC session.
+
+| Where | What |
+|---|---|
+| "Flipper 状态" side panel | 128×64 screen mirror (5 s, PNG inlined, nothing written to disk), battery/firmware metrics, free storage, six D-pad keys that re-capture after each press, refresh/connect |
+| Status strip above the composer | `Flipper 100%` / `Flipper 未连接`, refreshed every 15 s; silent when offline |
+| Tool result card | `flipper_screen` renders the capture as a native image card through `presentationMeta['dsh-go/view']` |
+| Link inference | on the phone `link` defaults to `ble` (`tcp://127.0.0.1:9757`); `flipper_cli` reports that BLE has no CLI channel |
+
+<p align="center">
+  <img src="docs/screenshots/dsh-go-flipper-panel.jpg" width="720" alt="Flipper status panel in dsh-go" />
+</p>
+<p align="center"><i>The "Flipper 状态" panel: live screen mirror, battery/firmware, free storage, D-pad — connected over the BLE bridge at tcp://127.0.0.1:9757</i></p>
+
+<p align="center">
+  <img src="docs/screenshots/dsh-go-ble-bridge.jpg" width="720" alt="Flipper BLE bridge on Android" />
+</p>
+<p align="center"><i>The Android BLE bridge: scan/pair → GATT connect → local TCP listener on 9757, with characteristic, MTU 247 and packet size in the log</i></p>
 
 ## Architecture
 
