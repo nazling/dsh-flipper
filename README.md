@@ -2,6 +2,7 @@
   <img src="android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="96" alt="dsh-flipper icon" />
   <h1>dsh-flipper</h1>
   <p><b>让 AI 通过 DSH 遥控 Flipper Zero</b></p>
+  <p><b>安卓端适配dsh go 做了插件优化和适配</b></p>
   <p>看屏幕 · 按键 · 启动 App · 读写 SD 卡 · Sub-GHz / NFC / RFID / 红外 / BadUSB / GPIO</p>
   <p>电脑端自带侧边栏面板 + Win32 串口直连：<b>插上 USB 就能用，不用跑 python</b></p>
   <p>
