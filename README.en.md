@@ -11,7 +11,7 @@ Sub-GHz / NFC / RFID / Infrared / BadUSB / GPIO.
 ### Status: connected, but the AI has not learned the device yet
 
 **Collecting: DeepSeek (DS) reasoning traces of driving the Flipper Zero.**
-
+<p><b>Optimized and adapted for DSH Go on Android via plugins</b></p>
 I do not have enough of the model's reasoning traces or training data, so the AI is not yet fluent
 with the Flipper. I'm collecting how you and your agent actually work through it: what you asked,
 how it inferred the current screen, how it navigated the menus, where it pressed the wrong thing,
